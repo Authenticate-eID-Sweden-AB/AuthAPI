@@ -113,7 +113,7 @@ message File {
 message JWTClaims
 {
   string key = 1;
-  string val = 2;
+  repeated string values = 2;
 }
 
 message CreateRequest {
@@ -309,6 +309,9 @@ message KYCResult {
 
   // PDF file with residency proof details
   File residency_proof_pdf = 26;
+
+  // last updated timestamp as seen in user entry
+  int32 last_updated = 27;
 }
 
 message GetResultResponse {
