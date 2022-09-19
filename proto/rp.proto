@@ -36,20 +36,32 @@ enum RequestType {
   // Device key request
   DEVICE_KEY = 1;
 
-  // Authentication request
+  // Authentication request. Successful request grants AUTHENCTICATE right
+  // for this {entity, company} pair
   AUTHENTICATION = 3;
 
   // Signature request. User signs request with his private key.
   SIGNATURE = 4;
 
   // Identification request. User details will be sent in the response.
-  // User must have verified account.
+  // User must have verified account. Successful request grants IDENTIFICATION
+  // right for this {entity, company} pair
   IDENTIFICATION = 5;
 
   // Know Your Customer request. Contains identification requests details and also more passport details,
   // sanctions and Politically Exposed Person (PEP) list checks and PDF documents with those information.
-  // User must have verified account.
+  // User must have verified account. Grants KYC right for this {entity, company} pair
   KYC = 6;
+
+  // Return right for {entity, company} pair + entity_unique_id. This request type
+  // does not prompt the user (via mobile) for an ACK. Its purpose is to serve
+  // the user with a QR code to get a eid_unique_id and info on previous rights for the RP.
+  // This will leave the phone app in a limbo state (stuck at QR scan phase). A further
+  // request of another type can then be created by the RP by referencing the SELECTOR's
+  // requestId. This will tie the new request to the SELECTOR request and progress the mobile
+  // app to the ACK phase of the type of the second request.
+  // This call cannot be created bound (has to use use_local_account)
+  SELECTOR = 7;
 }
 
 enum RequestStatus {
@@ -189,6 +201,7 @@ message CreateRequest {
     string email = 3;
     string eid_unique_id = 20;
     bool use_local_account = 14;
+    string selector_request_id = 21;
   }
 
   // Set to disable Face ID/fingerprints and force PIN code check
@@ -366,6 +379,10 @@ message GetResultResponse {
     bytes ocsp_response = 8;
   }
 
+  message SelectorResult {
+    repeated string granted_jwt_claims = 1;
+  }
+
   //bool success = 1;
   RequestStatus status = 16;
   int32 status_code = 17;
@@ -390,6 +407,7 @@ message GetResultResponse {
     IdentificationResult identification = 6;
     KYCResult kyc = 11;
     DeviceKeyResult device_key = 22;
+    SelectorResult selector = 30;
   }
 }
 
@@ -498,6 +516,7 @@ message HelperResponse {
   message KycStatus {
     KycStatusEnum status = 1;
     int32 last_updated = 2;
+    string eid_unique_id = 3;
   }
 
   oneof reply {
