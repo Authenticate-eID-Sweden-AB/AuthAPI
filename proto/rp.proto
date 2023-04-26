@@ -116,9 +116,23 @@ message Error {
 }
 
 message File {
+  message KycHashes {
+    string photo_hash  = 30;
+    string selfie_hash = 31;
+  }
+
+  message DownloadLink {
+    string url = 10;
+
+    oneof hashes {
+      KycHashes kyc_hashes      = 20;
+      string    residency_hash  = 21;
+    }
+  }
+
   oneof file {
-    string download_link = 1;
-    bytes embedded = 2;
+    DownloadLink  download_link = 1;
+    bytes         embedded      = 2;
   }
 }
 
@@ -517,6 +531,10 @@ message HelperResponse {
     KycStatusEnum status = 1;
     int32 last_updated = 2;
     string eid_unique_id = 3;
+
+    string photo_hash     = 10;
+    string selfie_hash    = 11;
+    string residency_hash = 12;
   }
 
   oneof reply {
