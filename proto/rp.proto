@@ -479,6 +479,16 @@ message PidResult {
   string given_name = 3;
 }
 
+message SPARResult {
+  string country    = 1;
+  string city       = 2;
+  string postcode   = 3;
+  string address    = 4;
+  string address2   = 5;
+  string from       = 6;
+  string till       = 7;
+}
+
 enum HelperType {
   TYPE_UNKNOWN = 0;
 
@@ -497,6 +507,9 @@ enum HelperType {
 
   //check personId for existing KYC data
   PID_LOOKUP = 5;
+
+  //get address for personId
+  SPAR_LOOKUP = 6;
 }
 
 message HelperRequest {
@@ -555,6 +568,7 @@ message HelperResponse {
     KycStatus     kyc_status        = 12;
     KYCResult     kyc_copy          = 13;
     PidResult     person_id_result  = 14;
+    SPARResult    spar_result       = 15;
   }
 }
 
