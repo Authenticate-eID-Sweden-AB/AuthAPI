@@ -473,6 +473,12 @@ message GetOcspResponse {
   bytes ocsp_response = 3;
 }
 
+message PidResult {
+  string name       = 1;
+  string surname    = 2;
+  string given_name = 3;
+}
+
 enum HelperType {
   TYPE_UNKNOWN = 0;
 
@@ -488,15 +494,19 @@ enum HelperType {
   //copy kyc info for user that was
   //authenticated within the last 10min
   COPY_KYC = 4;
+
+  //check personId for existing KYC data
+  PID_LOOKUP = 5;
 }
 
 message HelperRequest {
   HelperType type = 1;
 
   oneof account_identifier {
-    string email = 10;
-    string eid_unique_id = 11;
-    string jwt = 12;
+    string email          = 10;
+    string eid_unique_id  = 11;
+    string jwt            = 12;
+    string person_id      = 13;
   }
 }
 
@@ -528,22 +538,23 @@ message HelperResponse {
   }
 
   message KycStatus {
-    KycStatusEnum status = 1;
-    int32 last_updated = 2;
-    string eid_unique_id = 3;
+    KycStatusEnum status          = 1;
+    int32         last_updated    = 2;
+    string        eid_unique_id   = 3;
 
-    string photo_hash     = 10;
-    string selfie_hash    = 11;
-    string residency_hash = 12;
+    string        photo_hash      = 10;
+    string        selfie_hash     = 11;
+    string        residency_hash  = 12;
   }
 
   oneof reply {
-    string error = 2;
+    string        error             = 2;
 
-    string eid_unique_id = 10;
-    Emails emails = 11;
-    KycStatus kyc_status = 12;
-    KYCResult kyc_copy = 13;
+    string        eid_unique_id     = 10;
+    Emails        emails            = 11;
+    KycStatus     kyc_status        = 12;
+    KYCResult     kyc_copy          = 13;
+    PidResult     person_id_result  = 14;
   }
 }
 
