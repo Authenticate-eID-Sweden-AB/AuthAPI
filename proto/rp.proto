@@ -65,6 +65,26 @@ enum RequestType {
 
   // Start a bankid QR scan
   BANK_ID = 8;
+
+  //// -- helper types -- ////
+  //get eid_unique_id for email
+  GET_UNIQUE_ID = 20;
+
+  //get emails for eid_unique_id
+  GET_EMAILS = 21;
+
+  //get kyc status for account
+  GET_KYC_STATUS = 22;
+
+  //copy kyc info for user that was
+  //authenticated within the last 10min
+  COPY_KYC = 23;
+
+  //check personId for existing KYC data
+  PID_LOOKUP = 24;
+
+  //get address for personId
+  SPAR_LOOKUP = 25;
 }
 
 enum RequestStatus {
@@ -502,31 +522,8 @@ message SPARResult {
   string till       = 7;
 }
 
-enum HelperType {
-  TYPE_UNKNOWN = 0;
-
-  //get eid_unique_id for email
-  GET_UNIQUE_ID = 1;
-
-  //get emails for eid_unique_id
-  GET_EMAILS = 2;
-
-  //get kyc status for account
-  GET_KYC_STATUS = 3;
-
-  //copy kyc info for user that was
-  //authenticated within the last 10min
-  COPY_KYC = 4;
-
-  //check personId for existing KYC data
-  PID_LOOKUP = 5;
-
-  //get address for personId
-  SPAR_LOOKUP = 6;
-}
-
 message HelperRequest {
-  HelperType type = 1;
+  RequestType type = 1;
 
   oneof account_identifier {
     string email          = 10;
