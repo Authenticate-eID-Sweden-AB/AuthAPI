@@ -113,6 +113,9 @@ enum RequestStatus {
 
   // Update QR code
   UPDATE_QR = 20010;
+
+  // auto_start token
+  AUTO_TOKEN = 20011;
 }
 
 enum Serialization {
@@ -475,6 +478,7 @@ message GetStatusResponse {
   int32 status_code = 6;
   string request_id = 3;
   string qr_code = 10;
+  string auto_token = 11;
 }
 
 message GetFileRequest {
