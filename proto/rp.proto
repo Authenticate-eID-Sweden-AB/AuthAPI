@@ -62,6 +62,29 @@ enum RequestType {
   // app to the ACK phase of the type of the second request.
   // This call cannot be created bound (has to use use_local_account)
   SELECTOR = 7;
+
+  // Start a bankid QR scan
+  BANK_ID = 8;
+
+  //// -- helper types -- ////
+  //get eid_unique_id for email
+  GET_UNIQUE_ID = 20;
+
+  //get emails for eid_unique_id
+  GET_EMAILS = 21;
+
+  //get kyc status for account
+  GET_KYC_STATUS = 22;
+
+  //copy kyc info for user that was
+  //authenticated within the last 10min
+  COPY_KYC = 23;
+
+  //check personId for existing KYC data
+  PID_LOOKUP = 24;
+
+  //get address for personId
+  SPAR_LOOKUP = 25;
 }
 
 enum RequestStatus {
@@ -87,6 +110,9 @@ enum RequestStatus {
 
   // Account was not verified (or passport expired)
   ACCOUNT_NOT_VERIFIED = 20005;
+
+  // Update QR code
+  UPDATE_QR = 20010;
 }
 
 enum Serialization {
@@ -233,6 +259,9 @@ message CreateRequest {
 
     // Info specific to KYC requests
     KYC kyc = 13;
+
+    // for BankId request
+    string ip_address = 50;
   }
 }
 
@@ -397,7 +426,7 @@ message GetResultResponse {
     repeated string granted_jwt_claims = 1;
   }
 
-  //bool success = 1;
+  bool success = 1;
   RequestStatus status = 16;
   int32 status_code = 17;
   string request_id = 4;
@@ -414,14 +443,16 @@ message GetResultResponse {
 
   int32 timestamp_created = 23;
   int32 timestamp_finished = 24;
+  string error_msg = 50;
 
   oneof extra {
-    AuthenticationResult authentication = 14;
-    SignatureResult signature = 5;
-    IdentificationResult identification = 6;
-    KYCResult kyc = 11;
-    DeviceKeyResult device_key = 22;
-    SelectorResult selector = 30;
+    AuthenticationResult  authentication  = 14;
+    SignatureResult       signature       = 5;
+    IdentificationResult  identification  = 6;
+    KYCResult             kyc             = 11;
+    DeviceKeyResult       device_key      = 22;
+    SelectorResult        selector        = 30;
+    PidResult             bankid_reply    = 40;
   }
 }
 
@@ -443,6 +474,7 @@ message GetStatusResponse {
   RequestStatus status = 5;
   int32 status_code = 6;
   string request_id = 3;
+  string qr_code = 10;
 }
 
 message GetFileRequest {
@@ -473,30 +505,31 @@ message GetOcspResponse {
   bytes ocsp_response = 3;
 }
 
-enum HelperType {
-  TYPE_UNKNOWN = 0;
+message PidResult {
+  string person_id  = 1;
+  string name       = 10;
+  string surname    = 11;
+  string given_name = 12;
+}
 
-  //get eid_unique_id for email
-  GET_UNIQUE_ID = 1;
-
-  //get emails for eid_unique_id
-  GET_EMAILS = 2;
-
-  //get kyc status for account
-  GET_KYC_STATUS = 3;
-
-  //copy kyc info for user that was
-  //authenticated within the last 10min
-  COPY_KYC = 4;
+message SPARResult {
+  string country    = 1;
+  string city       = 2;
+  string postcode   = 3;
+  string address    = 4;
+  string address2   = 5;
+  string from       = 6;
+  string till       = 7;
 }
 
 message HelperRequest {
-  HelperType type = 1;
+  RequestType type = 1;
 
   oneof account_identifier {
-    string email = 10;
-    string eid_unique_id = 11;
-    string jwt = 12;
+    string email          = 10;
+    string eid_unique_id  = 11;
+    string jwt            = 12;
+    string person_id      = 13;
   }
 }
 
@@ -528,22 +561,24 @@ message HelperResponse {
   }
 
   message KycStatus {
-    KycStatusEnum status = 1;
-    int32 last_updated = 2;
-    string eid_unique_id = 3;
+    KycStatusEnum status          = 1;
+    int32         last_updated    = 2;
+    string        eid_unique_id   = 3;
 
-    string photo_hash     = 10;
-    string selfie_hash    = 11;
-    string residency_hash = 12;
+    string        photo_hash      = 10;
+    string        selfie_hash     = 11;
+    string        residency_hash  = 12;
   }
 
   oneof reply {
-    string error = 2;
+    string        error             = 2;
 
-    string eid_unique_id = 10;
-    Emails emails = 11;
-    KycStatus kyc_status = 12;
-    KYCResult kyc_copy = 13;
+    string        eid_unique_id     = 10;
+    Emails        emails            = 11;
+    KycStatus     kyc_status        = 12;
+    KYCResult     kyc_copy          = 13;
+    PidResult     person_id_result  = 14;
+    SPARResult    spar_result       = 15;
   }
 }
 
