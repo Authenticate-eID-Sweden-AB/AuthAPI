@@ -85,6 +85,9 @@ enum RequestType {
 
   //get address for personId
   SPAR_LOOKUP = 25;
+
+  //get PEP info for passport number
+  PEP_LOOKUP = 26;
 }
 
 enum RequestStatus {
@@ -534,6 +537,7 @@ message HelperRequest {
     string eid_unique_id  = 11;
     string jwt            = 12;
     string person_id      = 13;
+    string passport_id    = 14;
   }
 }
 
@@ -583,6 +587,7 @@ message HelperResponse {
     KYCResult     kyc_copy          = 13;
     PidResult     person_id_result  = 14;
     SPARResult    spar_result       = 15;
+    string        pep_search_reply  = 16;
   }
 }
 
