@@ -520,13 +520,28 @@ message PidResult {
 }
 
 message SPARResult {
-  string country    = 1;
-  string city       = 2;
-  string postcode   = 3;
-  string address    = 4;
-  string address2   = 5;
-  string from       = 6;
-  string till       = 7;
+  message Address {
+    string country    = 10;
+    string city       = 11;
+    string postcode   = 12;
+    string address    = 13;
+    string address2   = 14;
+    string lankod     = 15;
+    string kommunkod  = 16;
+  }
+
+  message Person {
+    string forename = 20;
+    string surname  = 21;
+    string gender   = 22;
+    string dob      = 23;
+  }
+
+  string  from      = 1;
+  string  till      = 2;
+
+  Address address   = 3;
+  Person  person    = 4;
 }
 
 message HelperRequest {
