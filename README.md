@@ -1,4 +1,4 @@
-# Auth eID gRPC API specification
+# Auth eID API specification
 
 ## Getting Started
 
