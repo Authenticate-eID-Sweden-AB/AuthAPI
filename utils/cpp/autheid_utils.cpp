@@ -7,10 +7,8 @@
 #include <botan/ecies.h>
 #include <botan/ecdsa.h>
 #endif
+#include <iostream>
 
-
-namespace autheid
-{
 
 namespace  {
 
@@ -25,111 +23,113 @@ const Botan::ECIES_System_Params kEciesParams(kDomain,
 
 } // namespace
 
-PrivateKey generatePrivateKey()
-{
-   Botan::AutoSeeded_RNG rnd;
-   return rnd.random_vec(kPrivateKeySize);
-}
-
-PublicKey getPublicKey(const PrivateKey &privateKey)
-{
-   try {
+namespace autheid {
+   PrivateKey generatePrivateKey()
+   {
       Botan::AutoSeeded_RNG rnd;
+      return rnd.random_vec(kPrivateKeySize);
+   }
 
-      Botan::BigInt privateKeyValue;
-      privateKeyValue.binary_decode(privateKey);
-      Botan::ECDH_PrivateKey privateKeyEC(rnd, kDomain, privateKeyValue);
-      privateKeyValue.clear();
+   PublicKey getPublicKey(const PrivateKey& privateKey)
+   {
+      try {
+         Botan::AutoSeeded_RNG rnd;
 
-      Bytes publicKey = privateKeyEC.public_point().encode(Botan::PointGFp::COMPRESSED);
-      if (publicKey.size() != kPublicKeySize) {
+         Botan::BigInt privateKeyValue;
+         privateKeyValue.binary_decode(privateKey);
+         Botan::ECDH_PrivateKey privateKeyEC(rnd, kDomain, privateKeyValue);
+         privateKeyValue.clear();
+
+         Bytes publicKey = privateKeyEC.public_point().encode(Botan::PointGFp::COMPRESSED);
+         if (publicKey.size() != kPublicKeySize) {
+            return {};
+         }
+
+         return publicKey;
+      } catch (...) {
          return {};
       }
+   }
 
-      return publicKey;
-   } catch (...){
-      return {};
+   Bytes encryptData(const void* data, size_t dataSize, const PublicKey& publicKey)
+   {
+      try {
+         Botan::AutoSeeded_RNG rng;
+
+         auto publicKeyDecoded = kDomain.OS2ECP(publicKey);
+
+         Botan::ECIES_Encryptor encrypt(rng, kEciesParams);
+
+         encrypt.set_other_key(publicKeyDecoded);
+
+         Bytes result = encrypt.encrypt(static_cast<const uint8_t*>(data), dataSize, rng);
+
+         return result;
+      } catch (...) {
+         return {};
+      }
+   }
+
+   SecureBytes decryptData(const void* data, size_t dataSize, const PrivateKey& privateKey)
+   {
+      try {
+         Botan::AutoSeeded_RNG rng;
+
+         Botan::BigInt privateKeyValue;
+         privateKeyValue.binary_decode(privateKey);
+         Botan::ECDH_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
+         privateKeyValue.clear();
+
+         Botan::ECIES_Decryptor decryptor(privateKeyDecoded, kEciesParams, rng);
+
+         auto result = decryptor.decrypt(static_cast<const uint8_t*>(data), dataSize);
+         return result;
+
+      } catch (const Botan::Decoding_Error& e) {
+         std::cerr << "botan exc: " << e.what() << "\n";
+         return {};
+      } catch (const ::std::exception& e) {
+         std::cerr << "exc: " << e.what() << "\n";
+         return {};
+      }
+   }
+
+   Bytes signData(const void* data, size_t dataSize, const PrivateKey& privateKey, bool derFormat)
+   {
+      try {
+         Botan::AutoSeeded_RNG rng;
+
+         Botan::BigInt privateKeyValue;
+         privateKeyValue.binary_decode(privateKey);
+         Botan::ECDSA_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
+         // Clear data for security
+         privateKeyValue.clear();
+
+         Botan::PK_Signer signer(privateKeyDecoded, rng, kSignAlg, derFormat ? Botan::DER_SEQUENCE : Botan::IEEE_1363);
+         signer.update(static_cast<const uint8_t*>(data), dataSize);
+         Bytes signature = signer.signature(rng);
+
+         return signature;
+      } catch (...) {
+         return {};
+      }
+   }
+
+   bool verifyData(const void* data, size_t dataSize, const void* sign, size_t signSize
+      , const PublicKey& publicKey, bool derFormat)
+   {
+      try {
+         auto publicKeyValue = kDomain.OS2ECP(publicKey);
+
+         Botan::ECDSA_PublicKey publicKeyDecoded(kDomain, publicKeyValue);
+
+         Botan::PK_Verifier verifier(publicKeyDecoded, kSignAlg, derFormat ? Botan::DER_SEQUENCE : Botan::IEEE_1363);
+         verifier.update(static_cast<const uint8_t*>(data), dataSize);
+         bool result = verifier.check_signature(static_cast<const uint8_t*>(sign), signSize);
+
+         return result;
+      } catch (...) {
+         return false;
+      }
    }
 }
-
-Bytes encryptData(const void *data, size_t dataSize, const PublicKey &publicKey)
-{
-   try {
-      Botan::AutoSeeded_RNG rng;
-
-      auto publicKeyDecoded = kDomain.OS2ECP(publicKey);
-
-      Botan::ECIES_Encryptor encrypt(rng, kEciesParams);
-
-      encrypt.set_other_key(publicKeyDecoded);
-
-      Bytes result = encrypt.encrypt(static_cast<const uint8_t*>(data), dataSize, rng);
-
-      return result;
-   } catch (...) {
-      return {};
-   }
-}
-
-SecureBytes decryptData(const void *data, size_t dataSize, const PrivateKey &privateKey)
-{
-   try {
-      Botan::AutoSeeded_RNG rng;
-
-      Botan::BigInt privateKeyValue;
-      privateKeyValue.binary_decode(privateKey);
-      Botan::ECDH_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
-      privateKeyValue.clear();
-
-      Botan::ECIES_Decryptor decryptor(privateKeyDecoded, kEciesParams, rng);
-
-      auto result = decryptor.decrypt(static_cast<const uint8_t*>(data), dataSize);
-      return result;
-
-   } catch (const Botan::Decoding_Error& e){
-      return {};
-   } catch (const std::exception& e) {
-      return {};
-   }
-}
-
-Bytes signData(const void *data, size_t dataSize, const PrivateKey &privateKey, bool derFormat)
-{
-   try {
-      Botan::AutoSeeded_RNG rng;
-
-      Botan::BigInt privateKeyValue;
-      privateKeyValue.binary_decode(privateKey);
-      Botan::ECDSA_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
-      // Clear data for security
-      privateKeyValue.clear();
-
-      Botan::PK_Signer signer(privateKeyDecoded, rng, kSignAlg, derFormat ? Botan::DER_SEQUENCE : Botan::IEEE_1363);
-      signer.update(static_cast<const uint8_t*>(data), dataSize);
-      Bytes signature = signer.signature(rng);
-
-      return signature;
-   } catch (...){
-      return {};
-   }
-}
-
-bool verifyData(const void *data, size_t dataSize, const void *sign, size_t signSize
-   , const PublicKey &publicKey, bool derFormat)
-{
-   try {
-      auto publicKeyValue = kDomain.OS2ECP(publicKey);
-
-      Botan::ECDSA_PublicKey publicKeyDecoded(kDomain, publicKeyValue);
-
-      Botan::PK_Verifier verifier(publicKeyDecoded, kSignAlg, derFormat ? Botan::DER_SEQUENCE : Botan::IEEE_1363);
-      verifier.update(static_cast<const uint8_t *>(data), dataSize);
-      bool result = verifier.check_signature(static_cast<const uint8_t *>(sign), signSize);
-
-      return result;
-   } catch (...){
-      return false;
-   }
-}
-
-} // namespace autheid
