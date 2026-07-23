@@ -3,12 +3,15 @@
 #include <vector>
 #include <string>
 
+#ifdef BUILD_BOTAN
 #if !defined(AUTHEID_BOTAN_AMALGAMATION)
 #include <botan/secmem.h>
 #else
 #include <botan_all.h>
 #endif
-
+#else
+#include <Utils/SecureBinaryData.h>
+#endif
 
 namespace autheid
 {
@@ -20,9 +23,13 @@ constexpr size_t kPrivateKeySize = 32;
 constexpr size_t kPublicKeySize = 33;
 
 using Bytes = std::vector<uint8_t>;
+#ifdef BUILD_BOTAN
 using SecureBytes = Botan::secure_vector<uint8_t>;
-
 using PublicKey = Bytes;
+#else
+using SecureBytes = SecureBinaryData;
+using PublicKey = SecureBinaryData;
+#endif
 using PrivateKey = SecureBytes;
 
 PrivateKey generatePrivateKey();
