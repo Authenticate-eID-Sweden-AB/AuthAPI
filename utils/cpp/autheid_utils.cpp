@@ -9,9 +9,14 @@
 #include <botan/ecdsa.h>
 #endif
 #else
+#include <openssl/bio.h>
+#include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/kdf.h>
+#include <openssl/param_build.h>
 #include <openssl/pem.h>
 #include <openssl/core_names.h>
+#include <spdlog/spdlog.h>
 #include <Utils/Cryptography.h>
 #endif
 #include <iostream>
@@ -23,7 +28,7 @@ namespace  {
 
 #ifdef BUILD_BOTAN
    // Use stream cipher and compressed point to get smaller encrypted size
-   const Botan::ECIES_System_Params kEciesParams(kDomain,
+   const Botan::ECIES_System_Params kEciesParams(Botan::EC_Group{ kDomain },
       "KDF2(SHA-256)", "ChaCha(20)", 32, "HMAC(SHA-256)", 20,
       Botan::PointGFp::COMPRESSED, Botan::ECIES_Flags::NONE);
 #endif
@@ -42,13 +47,13 @@ namespace autheid {
 
    PublicKey getPublicKey(const PrivateKey& privateKey)
    {
-      try {
 #ifdef BUILD_BOTAN
+      try {
          Botan::AutoSeeded_RNG rnd;
 
          Botan::BigInt privateKeyValue;
          privateKeyValue.binary_decode(privateKey);
-         Botan::ECDH_PrivateKey privateKeyEC(rnd, kDomain, privateKeyValue);
+         Botan::ECDH_PrivateKey privateKeyEC(rnd, Botan::EC_Group{ kDomain }, privateKeyValue);
          privateKeyValue.clear();
 
          const auto publicKey = privateKeyEC.public_point().encode(Botan::PointGFp::COMPRESSED);
@@ -56,95 +61,47 @@ namespace autheid {
             return {};
          }
          return publicKey;
-#else
-         return Cryptography::ECDSA::computePublicKey(privateKey, true);
-#endif
       } catch (...) {
          return {};
       }
+#else
+      return Cryptography::ECDSA::computePublicKey(privateKey, true);
+#endif
    }
 
-   Bytes encryptData(const void* data, size_t dataSize, const PublicKey& publicKey)
+   SecureBytes encryptData(const void* data, size_t dataSize, PublicKey publicKey)
    {
-      try {
 #ifdef BUILD_BOTAN
+      try {
          Botan::AutoSeeded_RNG rng;
-         auto publicKeyDecoded = kDomain.OS2ECP(publicKey);
+         auto publicKeyDecoded = Botan::EC_Group{ kDomain }.OS2ECP(publicKey);
          Botan::ECIES_Encryptor encrypt(rng, kEciesParams);
          encrypt.set_other_key(publicKeyDecoded);
 
          const auto& result = encrypt.encrypt(static_cast<const uint8_t*>(data), dataSize, rng);
          return result;
-#else
-         EVP_PKEY_CTX* ctx = NULL;
-         EVP_PKEY* ephemeralKey = NULL;
-         const unsigned char* pubKeyBytes = publicKey.getPtr();
-         auto outEphemeralPubDer = (unsigned char*)OPENSSL_malloc(publicKey.getSize());
-         const auto recvPubKey = d2i_PUBKEY(NULL, &pubKeyBytes, publicKey.getSize());
-         size_t sharedSecretLen = 0;
-         unsigned char keyAES[32];
-
-         // 1. Generate Ephemeral EC Key on the same curve
-         ctx = EVP_PKEY_CTX_new_from_pkey(NULL, recvPubKey, NULL);
-         EVP_PKEY_keygen_init(ctx);
-         EVP_PKEY_keygen(ctx, &ephemeralKey);
-         EVP_PKEY_CTX_free(ctx);
-
-         // 2. Export Ephemeral Public Key to DER (so receiver can read it later)
-         const auto outEphemeralPubLen = i2d_PUBKEY(ephemeralKey, &outEphemeralPubDer);
-
-         // 3. Set up ECDH Derivation
-         ctx = EVP_PKEY_CTX_new(ephemeralKey, NULL);
-         EVP_PKEY_derive_init(ctx);
-         EVP_PKEY_derive_set_peer(ctx, recvPubKey);
-
-         // Determine buffer size for shared secret and derive it
-         EVP_PKEY_derive(ctx, NULL, &sharedSecretLen);
-         auto sharedSecret = (unsigned char*)OPENSSL_malloc(sharedSecretLen);
-         EVP_PKEY_derive(ctx, sharedSecret, &sharedSecretLen);
-         EVP_PKEY_CTX_free(ctx);
-
-         // 4. KDF Layer: Hash the shared secret to obtain a 256-bit AES key
-         EVP_Q_digest(NULL, "SHA256", NULL, sharedSecret, sharedSecretLen, keyAES, NULL);
-         OPENSSL_free(sharedSecret);
-
-         // 5. Symmetric Cipher Layer: Encrypt plaintext with AES-256-GCM
-         EVP_CIPHER_CTX* ctxCipher = EVP_CIPHER_CTX_new();
-         const EVP_CIPHER* cipher = EVP_aes_256_gcm();
-
-         unsigned char iv[12] = { 0 }; // Use a cryptographically secure random IV in production!
-         Bytes result(dataSize + EVP_CIPHER_block_size(cipher));
-
-         EVP_EncryptInit_ex(ctxCipher, cipher, NULL, keyAES, iv);
-
-         int len = 0;
-         EVP_EncryptUpdate(ctxCipher, result.data(), &len, (unsigned char*)data, dataSize);
-         int finalLen = len;
-
-         EVP_EncryptFinal_ex(ctxCipher, result.data() + len, &len);
-         finalLen += len;
-         if (result.size() > finalLen) {
-            result.resize(finalLen);
-         }
-         EVP_CIPHER_CTX_free(ctxCipher);
-         EVP_PKEY_free(ephemeralKey);
-         OPENSSL_free(outEphemeralPubDer);   //maybe it should be passed upstream
-         return result;
-#endif
       } catch (...) {
          return {};
       }
+#else
+      const auto& iv = Cryptography::PRNG::generateRandomStrong(16);
+      const auto& key = publicKey.deriveSharedSecret();
+      auto result = iv;
+      result.append(Cryptography::Encryption::AES::encryptCBC(SecureBinaryData((uint8_t*)data, dataSize)
+         , key, iv));
+      return result;
+#endif
    }
 
    SecureBytes decryptData(const void* data, size_t dataSize, const PrivateKey& privateKey)
    {
-      try {
 #ifdef BUILD_BOTAN
+      try {
          Botan::AutoSeeded_RNG rng;
 
          Botan::BigInt privateKeyValue;
          privateKeyValue.binary_decode(privateKey);
-         Botan::ECDH_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
+         Botan::ECDH_PrivateKey privateKeyDecoded(rng, Botan::EC_Group{ kDomain }, privateKeyValue);
          privateKeyValue.clear();
 
          Botan::ECIES_Decryptor decryptor(privateKeyDecoded, kEciesParams, rng);
@@ -154,56 +111,16 @@ namespace autheid {
       } catch (const Botan::Decoding_Error& e) {
          std::cerr << "botan exc: " << e.what() << "\n";
          return {};
-#else
-         const unsigned char* privKeyBytes = privateKey.getPtr();
-         const auto recvPrivKey = d2i_AutoPrivateKey(NULL, &privKeyBytes, privateKey.getSize());
-         const auto publicKey = getPublicKey(privateKey);
-         const unsigned char* pubKeyBytes = publicKey.getPtr();
-         auto outEphemeralPubDer = (unsigned char*)OPENSSL_malloc(publicKey.getSize());
-         const auto recvPubKey = d2i_PUBKEY(NULL, &pubKeyBytes, publicKey.getSize());
-         EVP_PKEY_CTX* ctxPub = NULL;
-         EVP_PKEY* ephemeralKey = NULL;
-         ctxPub = EVP_PKEY_CTX_new_from_pkey(NULL, recvPubKey, NULL);
-         EVP_PKEY_keygen_init(ctxPub);
-         EVP_PKEY_keygen(ctxPub, &ephemeralKey);
-         EVP_PKEY_CTX_free(ctxPub);
-
-         // 1. Initialize the ECDH derivation context
-         auto ctx = EVP_PKEY_CTX_new(recvPrivKey, NULL);
-         EVP_PKEY_derive_init(ctx);
-         EVP_PKEY_derive_set_peer(ctx, ephemeralKey);
-
-         // 2. Determine the shared secret length buffer size and derive it
-         unsigned char* sharedSecret;
-         size_t secretLen = 0;
-         EVP_PKEY_derive(ctx, NULL, &secretLen);
-         sharedSecret = (unsigned char*)OPENSSL_malloc(secretLen);
-         EVP_PKEY_derive(ctx, sharedSecret, &secretLen);
-
-         // 3. Set up the Symmetric Decryption Context (AES-256-GCM / CBC)
-         EVP_CIPHER_CTX* cipher_ctx = EVP_CIPHER_CTX_new();
-         int outLen=0, finalLen=0;
-
-         SecureBytes result(dataSize * 2);
-         // Note: Use a Key Derivation Function (KDF) on shared_secret if the sender used one.
-         EVP_DecryptInit_ex(cipher_ctx, EVP_aes_256_cbc(), NULL, sharedSecret, NULL);
-         EVP_DecryptUpdate(cipher_ctx, (unsigned char*)result.getDataVector().data()
-            , &outLen, (unsigned char*)data, dataSize);
-         EVP_DecryptFinal_ex(cipher_ctx, (unsigned char*)result.getDataVector().data() + outLen
-            , &finalLen);
-         result.resize(finalLen);
-
-         // Cleanup resources
-         OPENSSL_clear_free(sharedSecret, secretLen);
-         EVP_CIPHER_CTX_free(cipher_ctx);
-         EVP_PKEY_CTX_free(ctx);
-         OPENSSL_free(outEphemeralPubDer);
-         return result;
-#endif
       } catch (const std::exception& e) {
          std::cerr << "exc: " << e.what() << "\n";
          return {};
       }
+#else
+      const auto& iv = SecureBinaryData((const uint8_t*)data, 16);
+      const auto& key = getPublicKey(privateKey).deriveSharedSecret();
+      return Cryptography::Encryption::AES::decryptCBC(SecureBinaryData(
+         (const uint8_t*)data + 16, dataSize - 16), key, iv);
+#endif
    }
 
    Bytes signData(const void* data, size_t dataSize, const PrivateKey& privateKey, bool derFormat)
@@ -214,7 +131,8 @@ namespace autheid {
 
          Botan::BigInt privateKeyValue;
          privateKeyValue.binary_decode(privateKey);
-         Botan::ECDSA_PrivateKey privateKeyDecoded(rng, kDomain, privateKeyValue);
+         Botan::ECDSA_PrivateKey privateKeyDecoded(rng, Botan::EC_Group{ kDomain }
+            , privateKeyValue);
          // Clear data for security
          privateKeyValue.clear();
 
@@ -224,7 +142,8 @@ namespace autheid {
          return signature;
 #else
          return Cryptography::ECDSA::signData(BinaryData{ (const uint8_t*)data
-            , dataSize }, privateKey).getDataVector();
+            , dataSize }, privateKey)
+            .getDataVector();
 #endif
       } catch (...) {
          return {};
@@ -251,5 +170,12 @@ namespace autheid {
       } catch (...) {
          return false;
       }
+   }
+
+   SecureBinaryData PublicKey::deriveSharedSecret()
+   {
+      SecureBinaryData result(32);
+      Cryptography::Hash::getHash256(*this, result.getPtr());
+      return result;
    }
 }
